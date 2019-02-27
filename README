@@ -1,0 +1,209 @@
+Project name: Automating the transcriptomics analysis
+Author: Fernando Delgado
+
+I. Objective: To Automate the transcriptomics analysis using Snakemake (a workflow-engine).
+
+II. Software and environment:
+A. List of software:
+
+1. FastQC v0.11.8
+2. Trimmomatic 0.38
+3. hisat2 version: 2.1.0
+4. htseq version: HTSeq-0.11.2
+5. conda (version: 4.5.12), where the followings will be added:
+      * R version: 3.5.0
+      * R packages: DESeq2
+                    gplots
+                    RColorBrewer
+      * snakemake (version: 5.4.2)
+
+B. Download and install software in home/bin directory:
+    > cd
+    > cd bin
+
+* Trimmomatic  (binary packages) from  http://www.usadellab.org/cms/?page=trimmomatic
+
+* FASTQC      from       http://www.bioinformatics.babraham.ac.uk/projects/fastqc/
+  Then add to .bashrc file
+  > echo "~/bin/FastQC" >> ~/.bashrc
+  > source ~/.bashrc
+
+* conda
+  > wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+  > bash ~/miniconda.sh -b
+  Then add to .bashrc file
+  > echo ". ~/miniconda3/etc/profile.d/conda.sh" >> ~/.bashrc
+  > source ~/.bashrc
+
+  > conda config --add channels bioconda
+  > conda config --add channels conda-forge
+  > conda create --name snakenv rstudio bioconductor-DESeq2 snakemake
+
+* hisat2
+  > wget ccb.jhu.edu/software/hisat2/dl/hisat2-2.1.0-Linux_x86_64.zip
+  > unzip hisat2-2.1.0-Linux_x86_64.zip
+  > echo export PATH=$PATH:~/bin/hisat2-2.1.0 >> ~/.bashrc
+  > source ~/.bashrc
+
+* htseq
+  > git clone https://github.com/simon-anders/htseq.git
+  > cd htseq
+  ~/bin/htseq> pip install HTSeq --user
+  > echo export PATH=$PATH:~/bin/htseq >> ~/.bashrc
+  > source ~/.bashrc
+  #checking
+  > htseq-count -h
+
+III. Preparation steps:
+
+A. first create the project directory : Analysis_Transcriptomic
+  #commands in your terminal:
+  > cd #move to root
+  > mkdir Analysis_Transcriptomic
+  > cd Analysis_Transcriptomic #move to the project directory
+
+SOFTWARE:
+
+B. Create bin directory in your project directory and link the executable software to you bin in your project directory
+  > cd ~/Analysis_Transcroptomic
+  > mkdir bin
+  > cd bin
+  > ln -s ~/bin/FastQC
+  > ln -s ~/bin/trimmomatic-0.38.jar
+  > ln -s ~/bin/hisat2-2.1.0
+  > ln -s ~/bin/htseq/
+
+RAWDATA:
+C. creating a data directory
+ > cd
+ > cd Analysis_Transcriptomic
+ > mkdir data
+ > cd data
+
+download to this directory your rawdata:
+  * genome data:  genes.gff  # annotation file
+                  genome.fna  # reference genome
+  * Single reads: * control (reference), 3 replicates:
+                                         ref1.fastq
+                                         ref2.fastq
+                                         ref3.fastq
+                  * Condition to be evaluated, 3 replicates:
+                                         fh1.fastq
+                                         fh2.fastq
+                                         fh3.fastq
+
+---description of the data--
+"We will use single reads representing two conditions.  Each condition has
+been replicated three times (numbered 1, 2 and 3). The condition fh stands
+for forest hot and is a soil which is rich in nutrients (dead organic material).
+The term ref stands for reference.  Here the fungus lives on poor media
+on an agar plate. The purpose is to see if there are (significantly) deferentially
+expressed genes when comparing the two conditions. The importance
+of replication is evaluated"
+
+D. creating a scr directory
+> cd..
+~/Analysis_Transcriptomic> mkdir scr
+> cd scr
+#import the following scripts:  * DifferentialExpression.R
+                                * seqfromgenome.py
+
+# make it executable
+~/Analysis_Transcriptomic/scr> chmod +x DifferentialExpression.R
+~/Analysis_Transcriptomic/scr> chmod +x seqfromgenome.py
+
+IV. Runing transcriptomic analysis steps:
+write the following commands:
+  > cd
+  > cd Analysis_Transcriptomic
+  > conda activate snakenv
+  > snakemake
+Then:
+  (snakenv) User ~/Analysis_Transcriptomic> pip install bin/htseq
+  > conda install -c r r-gplots
+  > conda install -c r r-RColorBrewer
+  > snakemake
+after runing the snakefile, deactivate the conda environment suing the following command:
+  > conda deactivate
+
+V. Analysis
+
+A. Data quality
+Start by checking the quality and correct for any quality problems encountered.
+This is done by using the FastQC program that takes fastq file as input.
+--- rule Quality in snakemake file (snakefile) ---
+Result are stored in directory 1_Quality. To see the html file open them using the following command: 1_Quality> opera *.html
+
+B. Trimming
+In this part, reads that have be corrected are processed (part are removed) by using the software trimmomatic.
+--- rule trimming in snakemake file (snakefile) ---
+Result are stored in directory 2_trimming.
+
+C. Index
+Here we index the genome file, creating a genome index called genome by using the software HISAT2.
+--- rule index in snakemake file (snakefile) ---
+Result are stored in directory 3_mapping.
+
+D. Mapping
+The cleaned reads will be used for mapping against the genome by using the software HISAT2.
+This is a splice junction aware aligner that can map different parts of the reads to different exons
+if the reads spans two or more exons
+--- rule mapping in snakemake file (snakefile) ---
+Result are stored in directory 3_mapping.
+
+E. Reads counts
+Here we use the software htseq to see the number of reads that mapped to each gene.
+--- rule readcounts in snakemake file (snakefile) ---
+Result are stored in directory 4_Read_counts.
+
+F. Differential Expression
+The differential expression analysis will be perform by using the DESeq2 package.
+We run the script DifferentialExpression.R. Here, we use a simple experiment design with
+the aim of investigate the difference between poor and rich conditions. Overexpression will mean
+that genes are overexpressed in the forest hot(fh) replicates as compared to the control(ref).
+The control replicates are grown in poor media and the forest hot in a rich media.
+For each gene the difference in (normalized) counts for the two conditions can be assigned a p-value, which
+is ajusted using the Benjamini-Hochberg method. Each gene is given a corrected p-value called q-value or p-adj.
+
+Results are stored in directory 5_differential_expression:
+
+--- rule DifferentialExpression in snakemake file (snakefile) ---
+
+*normalized.count:The gene expression is normalized using statistical methods.
+
+*diffExp.tab (all calculations), where:
+                                  baseMean - mean estimated from both conditions (with normalization by size factors)
+                                  log2FoldChange - log2 of the ratio
+                                  lfcSE - standard error of log2 fold change
+                                  stat - the Wald test statistics
+                                  pval - uncorrected p-value from the negative binomial test
+                                  padj - p-value adjusted for multiple testing using Benjamini-Hochberg
+                                          to estimate the false discovery rate
+
+*diffExp.0.01.tab: A list of the genes that have a p-adj value below 0.01
+*diffExp.0.05.tab: A list of the genes that have a p-adj value below 0.05
+
+G. MORE EXPRESSED GENES
+The name and sequences (CDS) of the top most significantly (Padj < 0.01) deferentially expressed genes are stored in two files in
+the directory 5_differential_expression.
+
+--- rule top_more_expressed ---
+
+* topmorexpressed: the 20 most significantly (Padj < 0.01) deferentially expressed genes.
+                       First column (name of the gene), second column (log2FoldChange)
+
+--- rule rule sequences ---
+
+* morexpresedseq.fasta: fasta file containing the CDS sequences of the top 9 genes more expressed.
+
+H. VISUALIZE
+
+A few graphs are made to visualize the results, which are stored in directory 6_visualize:
+* fig1.pdf: Expression versus significance
+* fig2.pdf: Expression heatmap for the most expressed genes
+* fig3.pdf: Heatmap of similarity between replicates
+* fig4.png: Principal component analysis plot
+
+you can see the figures using the following command: 6_visualize > opera *
+
+I. file running.log in Analysis_Transcriptomic directory stores stderr of some programs run by snakemake.
