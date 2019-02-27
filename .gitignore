@@ -1,0 +1,8 @@
+.snakemake/
+bin/
+TOPASS/
+data/
+results/
+Labnotebook
+*.log
+borradordeSnakefileparatranscriptomic
